@@ -8,29 +8,29 @@ use hal::pac;
 use embedded_hal::digital::OutputPin;
 use embedded_hal::delay::DelayNs;
 
-/// این بخش حتماً باید در ابتدای فلش قرار بگیرد
+/// This section must be placed at the beginning of flash.
 #[unsafe(link_section = ".boot2")]
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 
-/// کریستال خارجی روی Pico معمولاً ۱۲ مگاهرتز است
+/// The external crystal on the Pico is usually 12 MHz.
 const XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 #[hal::entry]
 fn main() -> ! {
-    // گرفتن مالکیت تمام peripheralها (فقط یک بار می‌شود این کار را کرد)
-    // چرا یک بار چون ممکنه: race condition و دسترسی هزمان نا امن صورت بگیره
-    // و Peripherals می‌کنه: Peripherals یعنی خودِ رجیسترها و واحدهای سخت‌افزاری چیپ که PAC برایشان یک API ساخته رو می‌گیریم که بتونیم استفاده کنیم
+    // Take ownership of all peripherals (this can only be done once).
+    // Why only once? Because a race condition and unsafe concurrent access could occur.
+    // Peripherals are the chip's registers and hardware units, for which the PAC provides an API so we can use them.
     let mut pac = pac::Peripherals::take().unwrap();
 
-    // Watchdog برای تنظیم ساعت لازم است
-    // Watchdog یک تایمرِ نظارتی در خودِ چیپ است.
-    // یعنی به watchdog میگیم: «من هنوز زنده‌ام حزوم‌زاده ها، ریست نکن 😁».
+    // The watchdog is needed to configure the clock.
+    // The watchdog is a monitoring timer built into the chip.
+    // In other words, we tell the watchdog: "I'm still alive, don't reset me 😁".
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
 
-    // راه‌اندازی ساعت‌ها و PLLها
-    // PLL = مولد فرکانس دقیق
-        let clocks = hal::clocks::init_clocks_and_plls(
+    // Initialize the clocks and PLLs.
+    // PLL = a precise frequency generator.
+    let clocks = hal::clocks::init_clocks_and_plls(
         XTAL_FREQ_HZ,
         pac.XOSC,
         pac.CLOCKS,
@@ -41,23 +41,23 @@ fn main() -> ! {
     )
         .unwrap();
 
-    // تایمر برای delay
-    // اما Timer خودش کریستال نیست و
-    // مستقیماً با آن کار نمی‌کند؛ clock tree سیستم از منابع clock، از جمله کریستال، استفاده می‌کند
-    // و Timer یک مرجع زمانی مناسب دریافت می‌کند.
+    // Timer for delays.
+    // However, the Timer itself is not a crystal, and
+    // it does not work with the crystal directly; the system clock tree uses clock sources, including the crystal,
+    // and the Timer receives a suitable time reference.
     let mut timer = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
-    // دسترسی به GPIO
-    // این بخش برای آماده‌کردن پایه‌های GPIO و روشن/خاموش کردن LED داخلی Pico است.
+    // Access GPIO.
+    // This section prepares the GPIO pins and turns the Pico's built-in LED on and off.
     let sio = hal::Sio::new(pac.SIO);
-    ///این خط سیستم GPIO را راه می‌اندازد و پین‌ها را آماده می‌کند.
+    ///This line initializes the GPIO system and prepares the pins.
     //
-    // ورودی‌ها:
+    // Inputs:
     //
-    // pac.IO_BANK0 → تنظیم عملکرد پایه‌ها
-    // pac.PADS_BANK0 → تنظیم ویژگی‌های الکتریکی پایه‌ها
-    // sio.gpio_bank0 → کنترل GPIO از سمت SIO
-    // &mut pac.RESETS → خارج کردن این بخش‌ها از reset
+    // pac.IO_BANK0 → configures the pins' functions
+    // pac.PADS_BANK0 → configures the pins' electrical characteristics
+    // sio.gpio_bank0 → controls GPIO through the SIO
+    // &mut pac.RESETS → takes these blocks out of reset
     let pins = hal::gpio::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
@@ -66,7 +66,7 @@ fn main() -> ! {
     );
 
 
-    // LED داخلی Pico روی GPIO25 است
+    // The Pico's built-in LED is on GPIO25.
     let mut led = pins.gpio25.into_push_pull_output();
 
     loop {
